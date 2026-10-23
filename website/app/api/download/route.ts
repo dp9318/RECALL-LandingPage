@@ -1,27 +1,33 @@
 /**
  * Protected official download route.
  * Follows docs/ARCHITECTURE.md, docs/AUTH_AND_DOWNLOAD.md, and docs/SECURITY.md.
- *
- * NOTE: Full server authorization, Upstash rate limiting, and private Storage
- * signed URL generation are owned by Shiva (feature/landing-page-auth-security).
- * This endpoint strictly enforces authentication and refuses unauthenticated
- * or unconfigured access without faking download links.
+ * 
+ * Flow:
+ * 1. Verify server environment configuration.
+ * 2. Authenticate session via server-side Supabase client (getUser).
+ * 3. Enforce dual rate limits (User ID + Client IP) via Upstash with fail-closed behavior.
+ * 4. Resolve fixed server-side release metadata (Bucket + ObjectPath).
+ * 5. Issue short-lived 120-second signed URL via Admin Storage client.
+ * 6. Safely redirect (307) or return signed URL with strict private no-store headers.
  */
 
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { getActiveRelease } from "@/lib/releases";
 import { SECURITY_CONFIG } from "@/lib/security/contracts";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getClientIp } from "@/lib/security/ip";
+import { checkDownloadRateLimit } from "@/lib/ratelimit";
+import { createServerSupabaseClient, getAuthenticatedUser } from "@/lib/supabase/server";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
-export async function GET() {
-  const headers = {
+export async function GET(request: NextRequest) {
+  const headers = new Headers({
     "Cache-Control": SECURITY_CONFIG.CACHE_CONTROL_PROTECTED,
-    "Content-Type": "application/json",
-  };
+  });
 
-  const supabase = await createServerSupabaseClient();
   const release = getActiveRelease();
+  const supabase = await createServerSupabaseClient();
 
+  // 1. Check if public client is configured
   if (!supabase) {
     return NextResponse.json(
       {
@@ -34,12 +40,9 @@ export async function GET() {
     );
   }
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
+  // 2. Server-side session verification
+  const user = await getAuthenticatedUser();
+  if (!user) {
     return NextResponse.json(
       {
         error: "unauthorized",
@@ -50,20 +53,106 @@ export async function GET() {
     );
   }
 
-  // Once Shiva connects private Supabase Storage and rate limiting in Phase 4:
-  // 1. Verify Upstash rate limit for user.id and trusted client IP.
-  // 2. Call supabase.storage.from(release.storageBucket).createSignedUrl(release.objectPath, 120).
-  // 3. Return 302/307 redirect to the signed URL or return { signedUrl }.
-  return NextResponse.json(
-    {
-      status: "pending_storage_integration",
-      message:
-        "Authenticated session detected. Private release storage handoff is pending backend provider setup.",
-      release: {
-        version: release.version,
-        filename: release.downloadFilename,
+  // 3. Rate limiting check (User ID & Client IP)
+  const clientIp = getClientIp(request.headers);
+  const rateLimitResult = await checkDownloadRateLimit(user.id, clientIp);
+
+  if (!rateLimitResult.success) {
+    // If rate limiter failed closed (outage or Redis error)
+    if (rateLimitResult.failedClosed) {
+      headers.set("Retry-After", "60");
+      return NextResponse.json(
+        {
+          error: "rate_limiter_unavailable",
+          message: "Rate limiting verification service is temporarily unavailable. Please retry shortly.",
+        },
+        { status: 503, headers }
+      );
+    }
+
+    // Standard rate limit exceeded (HTTP 429)
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil((rateLimitResult.reset - Date.now()) / 1000)
+    );
+    headers.set("Retry-After", String(retryAfterSeconds));
+
+    return NextResponse.json(
+      {
+        error: "rate_limit_exceeded",
+        message: `Too many download attempts. Please wait ${retryAfterSeconds} seconds before requesting a new link.`,
+        retryAfter: retryAfterSeconds,
       },
-    },
-    { status: 200, headers }
-  );
+      { status: 429, headers }
+    );
+  }
+
+  // 4. Generate signed URL from private Storage using admin client
+  const adminClient = createAdminSupabaseClient();
+  if (!adminClient) {
+    // If admin key is missing in production, storage handoff cannot complete securely
+    return NextResponse.json(
+      {
+        error: "storage_unconfigured",
+        message: "Secure release storage backend is not yet fully configured.",
+        release: {
+          version: release.version,
+          filename: release.downloadFilename,
+        },
+      },
+      { status: 503, headers }
+    );
+  }
+
+  try {
+    const { data, error: storageError } = await adminClient.storage
+      .from(release.storageBucket)
+      .createSignedUrl(
+        release.objectPath,
+        SECURITY_CONFIG.SIGNED_URL_EXPIRY_SECONDS,
+        {
+          download: release.downloadFilename,
+        }
+      );
+
+    if (storageError || !data?.signedUrl) {
+      console.error("[Download] Storage signed URL error:", storageError?.message);
+      return NextResponse.json(
+        {
+          error: "release_unavailable",
+          message: "The requested release package is currently unavailable. Please verify release status.",
+        },
+        { status: 404, headers }
+      );
+    }
+
+    // 5. Check if request prefers JSON (e.g. from fetch) or direct navigation
+    const acceptHeader = request.headers.get("accept") || "";
+    if (acceptHeader.includes("application/json")) {
+      return NextResponse.json(
+        {
+          version: release.version,
+          filename: release.downloadFilename,
+          signedUrl: data.signedUrl,
+          expiresIn: SECURITY_CONFIG.SIGNED_URL_EXPIRY_SECONDS,
+        },
+        { status: 200, headers }
+      );
+    }
+
+    // Direct browser navigation: redirect to the signed URL
+    return NextResponse.redirect(data.signedUrl, {
+      status: 307,
+      headers,
+    });
+  } catch (err) {
+    console.error("[Download] Unexpected server error during download issuance:", err);
+    return NextResponse.json(
+      {
+        error: "internal_error",
+        message: "An error occurred while generating the secure download URL.",
+      },
+      { status: 500, headers }
+    );
+  }
 }

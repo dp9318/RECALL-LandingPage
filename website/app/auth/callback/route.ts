@@ -3,11 +3,11 @@
  * Follows docs/AUTH_AND_DOWNLOAD.md and docs/SECURITY.md.
  */
 
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { validateReturnPath } from "@/lib/security/redirect";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
   const rawNext = requestUrl.searchParams.get("next") || requestUrl.searchParams.get("returnTo");
@@ -20,6 +20,7 @@ export async function GET(request: Request) {
       if (!error) {
         return NextResponse.redirect(new URL(safeNext, requestUrl.origin));
       }
+      console.error("[AuthCallback] Exchange code error:", error.message);
     }
   }
 
