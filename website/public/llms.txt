@@ -1,0 +1,35 @@
+# RECALL — Persistent Memory for AI Coding Agents
+
+> RECALL is a local-first persistent memory engine and custom instruction enforcement layer for AI coding agents.
+
+## Overview
+RECALL provides durable, cross-session project memory and deterministic instruction precedence for AI coding agents. Rather than losing architectural context, historical decisions, and project conventions between conversations, RECALL retrieves relevant context through standard Model Context Protocol (MCP) interfaces.
+
+## Canonical Truth and Storage Architecture
+- Local-first persistence: SQLite acts as the canonical store of truth on the local machine.
+- Derived semantic indexing: ChromaDB provides a derived, rebuildable semantic vector index.
+- Separate website portal: The RECALL marketing website and Supabase auth/download portal do not store, ingest, or transmit local project memories or source code.
+- Cloud fallback nuance: Local arbitration is preferred; optional cloud conflict resolution operates only if explicitly configured by the user.
+
+## What RECALL Does
+- Preserves durable project decisions and conventions across agent conversations.
+- Enforces user-authored global and project-scoped custom instructions with explicit priority.
+- Performs hybrid retrieval combining structured SQLite metadata and semantic vector search.
+- Preserves memory lineage and supersession provenance rather than silently overwriting evidence.
+- Exposes tools via the standard Model Context Protocol (MCP) for seamless integration with coding agents.
+
+## What RECALL Does Not Do
+- RECALL is NOT a standalone chatbot.
+- RECALL is NOT a hosted SaaS replacement for your coding agent.
+- RECALL does NOT upload your local project memories, code snippets, or custom instructions to the marketing site database.
+
+## Compatibility and System Requirements
+- Platform: 64-bit Windows 10 (build 19041+) or Windows 11.
+- Runtime dependency: Python 3.11 or 3.12 in PATH.
+- Protocol: Model Context Protocol (MCP) compatible hosts and stdio/SSE clients.
+
+## Key Links & Documentation
+- Official Repository: https://github.com/dp9318/RECALL
+- Documentation & Setup: https://github.com/dp9318/RECALL#readme
+- License: MIT License (https://github.com/dp9318/RECALL/blob/main/LICENSE)
+- Issues & Discussions: https://github.com/dp9318/RECALL/issues
