@@ -98,7 +98,7 @@ export function Features() {
 
                 <div className="mt-6 pt-4 border-t border-recall-blue-muted/10 flex items-center gap-2 text-xs font-mono text-recall-blue-muted">
                   <span className="w-1.5 h-1.5 rounded-full bg-recall-amber/60" />
-                  Verified in local daemon
+                  Core engine capability
                 </div>
               </div>
             );

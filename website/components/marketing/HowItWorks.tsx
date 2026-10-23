@@ -80,7 +80,7 @@ export function HowItWorks() {
               Your memory stays on your device.
             </h3>
             <p className="text-sm text-recall-blue-muted leading-relaxed">
-              RECALL stores memories in a local SQLite database on your machine. Semantic indexing runs locally in ChromaDB. The website authentication portal exists strictly for binary licensing and downloads—your project code, prompts, memories, and instructions are never uploaded to the marketing site or cloud storage.
+              RECALL stores memories in a local SQLite database on your machine, with derived semantic indexing in ChromaDB. The website authentication portal exists strictly for release download access—your project code, prompts, memories, and instructions are never uploaded to the marketing site. If you optionally configure external cloud providers for conflict arbitration, only bounded conflict context is sent according to your explicit settings.
             </p>
           </div>
         </div>
