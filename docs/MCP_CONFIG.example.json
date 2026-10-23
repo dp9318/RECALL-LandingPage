@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "shadcn": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "shadcn@latest",
+        "mcp"
+      ]
+    },
+    "21st": {
+      "serverUrl": "https://21st.dev/api/mcp",
+      "headers": {
+        "x-api-key": "REPLACE_WITH_YOUR_21ST_API_KEY"
+      }
+    },
+    "figma-framelink": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "figma-developer-mcp",
+        "--stdio"
+      ],
+      "env": {
+        "FIGMA_API_KEY": "REPLACE_WITH_YOUR_FIGMA_ACCESS_TOKEN"
+      }
+    }
+  }
+}
